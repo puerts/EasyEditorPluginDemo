@@ -1,0 +1,6 @@
+[submodule "Plugins/UEImgui"]
+	path = Plugins/UEImgui
+	url = https://github.com/ZhuRong-HomoStation/UEImgui.git
+[submodule "Plugins/EasyEditorPlugin"]
+	path = Plugins/EasyEditorPlugin
+	url = https://github.com/puerts/EasyEditorPlugin.git
