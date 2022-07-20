@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "commonjs",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata":true,
+    "strictFunctionTypes": true,
+    "jsx": "react",
+    "sourceMap": true,
+    "typeRoots": [
+      "../Plugins/Puerts/Typing",
+      "../Plugins/ReactUMG/Typing",
+      "./node_modules/@types"
+    ],
+    "outDir": "../Content/EasyEditorScripts"
+  },
+  "include": [
+    "src/**/*"
+  ],
+}
