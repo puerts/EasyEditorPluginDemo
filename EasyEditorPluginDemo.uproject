@@ -9,5 +9,19 @@
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
 		}
+	],
+    "Plugins": [
+		{
+			"Name": "Puerts",
+			"Enabled": true
+		},
+        {
+			"Name": "UEImgui",
+			"Enabled": true
+		},
+        {
+			"Name": "EasyEditorPlugin",
+			"Enabled": true
+		}
 	]
 }
