@@ -108,6 +108,18 @@ cpp.EasyEditorPlugin.AddConsoleCommand("Puerts.TestCmd", "just a test...", (...a
     }
 })
 
+cpp.UEImGui.AddDetailCustomization(UE.SkyLight.StaticClass(), (obj:UE.Object) => {
+    cpp.UEImGui.BeginDetail();
+    cpp.ImGui.Text(`SkyLight Name:${obj.GetName()}`);
+    cpp.UEImGui.EndDetail();
+});
+
+cpp.UEImGui.AddDetailCustomization(UE.Actor.StaticClass(), (obj:UE.Object) => {
+    cpp.UEImGui.BeginDetail();
+    cpp.ImGui.Text(`Actor Name:${obj.GetName()}`);
+    cpp.UEImGui.EndDetail();
+});
+
 menus.RefreshAllWidgets();
 
 //EasyEditorPlugin.SetOnJsEnvPreReload(() => {

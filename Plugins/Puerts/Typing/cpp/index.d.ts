@@ -1,5 +1,6 @@
 declare module "cpp" {
     import * as UE from "ue"
+    import * as cpp from "cpp"
     import {$Ref, $Nullable, cstring} from "puerts"
 
     class EasyEditorPlugin {
@@ -258,9 +259,9 @@ declare module "cpp" {
         static VSliderFloat(p0: cstring, p1: ImVec2, p2: $Ref<number>, p3: number, p4: number, p5?: cstring, p6?: number) :boolean;
         static VSliderInt(p0: cstring, p1: ImVec2, p2: $Ref<number>, p3: number, p4: number, p5?: cstring, p6?: number) :boolean;
         static VSliderScalar(p0: cstring, p1: ImVec2, p2: number, p3: ArrayBuffer, p4: ArrayBuffer, p5: ArrayBuffer, p6?: cstring, p7?: number) :boolean;
-        static InputText(p0: cstring, p1: $Ref<string>, p2?: number, p3?: (p0:ImGuiInputTextCallbackData) => number) :boolean;
-        static InputTextMultiline(p0: cstring, p1: $Ref<string>, p2?: ImVec2, p3?: number, p4?: (p0:ImGuiInputTextCallbackData) => number) :boolean;
-        static InputTextWithHint(p0: cstring, p1: cstring, p2: $Ref<string>, p3?: number, p4?: (p0:ImGuiInputTextCallbackData) => number) :boolean;
+        static InputText(p0: cstring, p1: $Ref<string>, p2?: number, p3?: (p0:cpp.ImGuiInputTextCallbackData) => number) :boolean;
+        static InputTextMultiline(p0: cstring, p1: $Ref<string>, p2?: ImVec2, p3?: number, p4?: (p0:cpp.ImGuiInputTextCallbackData) => number) :boolean;
+        static InputTextWithHint(p0: cstring, p1: cstring, p2: $Ref<string>, p3?: number, p4?: (p0:cpp.ImGuiInputTextCallbackData) => number) :boolean;
         static InputFloat(p0: $Nullable<cstring>, p1: ArrayBuffer, p2?: number, p3?: number, p4?: $Nullable<cstring>, p5?: number) :boolean;
         static InputFloat2(p0: $Nullable<cstring>, p1: ArrayBuffer, p2?: $Nullable<cstring>, p3?: number) :boolean;
         static InputFloat3(p0: $Nullable<cstring>, p1: ArrayBuffer, p2?: $Nullable<cstring>, p3?: number) :boolean;
@@ -565,6 +566,10 @@ declare module "cpp" {
         static AddGlobalWindow(p0: () => boolean, p1?: UE.Object) :number;
         static RemoveGlobalWindow(p0: number, p1?: UE.Object) :void;
         static DrawSmallWidgetDemo() :void;
+        static AddDetailCustomization(p0: UE.Class, p1: (p0:UE.Object) => void) :void;
+        static RemoveDetailCustomization(p0: UE.Class) :void;
+        static BeginDetail() :void;
+        static EndDetail() :void;
     }
 
 }

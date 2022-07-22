@@ -61,6 +61,22 @@
 
 #define UsingUStruct(CLS) UsingUClass(CLS)
 
+#define UsingContainer(CLS) __DefObjectType(CLS) __DefCDataPointerConverter(CLS)
+
+#define UsingTSharedPtr(ITEMCLS) __DefObjectType(TSharedPtr<ITEMCLS>) __DefCDataPointerConverter(TSharedPtr<ITEMCLS>)
+
+template <class T>
+struct TSharedPtrExtension
+{
+    static bool Equals(const TSharedPtr<T> Lhs, const TSharedPtr<T> Rhs)
+    {
+        return Lhs == Rhs;
+    }
+};
+
+#define RegisterTSharedPtr(ITEMCLS) \
+    puerts::DefineClass<TSharedPtr<ITEMCLS>>().Method("Equals", MakeExtension(&TSharedPtrExtension<ITEMCLS>::Equals)).Register();
+
 namespace puerts
 {
 class TCharStringHolder
@@ -324,6 +340,63 @@ struct ScriptTypeName<FArrayBuffer>
     static constexpr auto value()
     {
         return Literal("ArrayBuffer");
+    }
+};
+
+template <typename T>
+struct ScriptTypeNameWithNamespace<T,
+    typename std::enable_if<is_objecttype<typename std::remove_pointer<typename std::decay<T>::type>::type>::value>::type>
+{
+    static constexpr auto value()
+    {
+        return Literal("cpp.") + ScriptTypeName<T>::value();
+    }
+};
+
+template <typename T>
+struct ScriptTypeNameWithNamespace<T,
+    typename std::enable_if<is_uetype<typename std::remove_pointer<typename std::decay<T>::type>::type>::value>::type>
+{
+    static constexpr auto value()
+    {
+        return Literal("UE.") + ScriptTypeName<T>::value();
+    }
+};
+
+template <typename T>
+struct ScriptTypeName<TSharedPtr<T>>
+{
+    static constexpr auto value()
+    {
+        return Literal("UE.TSharedPtr<") + ScriptTypeNameWithNamespace<T>::value() + Literal(">");
+    }
+};
+
+template <typename T>
+struct ScriptTypeName<TArray<T>>
+{
+    static constexpr auto value()
+    {
+        return Literal("UE.TArray<") + ScriptTypeNameWithNamespace<T>::value() + Literal(">");
+    }
+};
+
+template <typename T>
+struct ScriptTypeName<TSet<T>>
+{
+    static constexpr auto value()
+    {
+        return Literal("UE.TSet<") + ScriptTypeNameWithNamespace<T>::value() + Literal(">");
+    }
+};
+
+template <typename TKey, typename TValue>
+struct ScriptTypeName<TMap<TKey, TValue>>
+{
+    static constexpr auto value()
+    {
+        return Literal("UE.TMap<") + ScriptTypeNameWithNamespace<TKey>::value() + Literal(", ") +
+               ScriptTypeNameWithNamespace<TValue>::value() + Literal(">");
     }
 };
 

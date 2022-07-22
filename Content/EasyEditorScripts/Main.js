@@ -98,6 +98,16 @@ cpp.EasyEditorPlugin.AddConsoleCommand("Puerts.TestCmd", "just a test...", (...a
         console.log(`arg${i}: ${args[i]}`);
     }
 });
+cpp.UEImGui.AddDetailCustomization(UE.SkyLight.StaticClass(), (obj) => {
+    cpp.UEImGui.BeginDetail();
+    cpp.ImGui.Text(`SkyLight Name:${obj.GetName()}`);
+    cpp.UEImGui.EndDetail();
+});
+cpp.UEImGui.AddDetailCustomization(UE.Actor.StaticClass(), (obj) => {
+    cpp.UEImGui.BeginDetail();
+    cpp.ImGui.Text(`Actor Name:${obj.GetName()}`);
+    cpp.UEImGui.EndDetail();
+});
 menus.RefreshAllWidgets();
 //EasyEditorPlugin.SetOnJsEnvPreReload(() => {
 //    menus.RemoveMenu("LevelEditor.MainMenu.Puerts");

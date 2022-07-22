@@ -37143,6 +37143,30 @@ declare module "ue" {
     enum EAppReturnType { No, Yes, YesAll, NoAll, Cancel, Ok, Retry, Continue, EAppReturnType_MAX, __typeKeyDoNoAccess}
     enum EARSessionConfigFlags { None, GenerateMeshData, RenderMeshDataInWireframe, GenerateCollisionForMeshData, GenerateNavMeshForMeshData, UseMeshDataForOcclusion, EARSessionConfigFlags_MAX, __typeKeyDoNoAccess}
     enum EAssetEditorOpenLocation { Default, NewWindow, MainWindow, ContentBrowser, LastDockedWindowOrNewWindow, LastDockedWindowOrMainWindow, LastDockedWindowOrContentBrowser, EAssetEditorOpenLocation_MAX, __typeKeyDoNoAccess}
+    class ImguiDetailCustomization extends UE.Object {
+        constructor(Outer?: Object, Name?: string, ObjectFlags?: number);
+        GetSupportClass() : UE.Class;
+        IsSupportClass(InClass: $Nullable<UE.Class>) : boolean;
+        OnEditMultiObject(InObjects: TArray<UE.Object>) : void;
+        OnEditSingleObject(InObject: $Nullable<UE.Object>) : void;
+        SupportMultiObjectEditing() : boolean;
+        SupportSingleObjectEditing() : boolean;
+        static StaticClass(): Class;
+        static Find(OrigInName: string, Outer?: Object): ImguiDetailCustomization;
+        static Load(InName: string): ImguiDetailCustomization;
+    
+        __tid_ImguiDetailCustomization__: boolean;
+    }
+    
+    class EasyEditorDetailCustomization extends UE.ImguiDetailCustomization {
+        constructor(Outer?: Object, Name?: string, ObjectFlags?: number);
+        static StaticClass(): Class;
+        static Find(OrigInName: string, Outer?: Object): EasyEditorDetailCustomization;
+        static Load(InName: string): EasyEditorDetailCustomization;
+    
+        __tid_EasyEditorDetailCustomization__: boolean;
+    }
+    
     class EasyEditorPluginDemoGameModeBase extends UE.GameModeBase {
         constructor(Outer?: Object, Name?: string, ObjectFlags?: number);
         static StaticClass(): Class;
@@ -39670,9 +39694,9 @@ declare module "ue" {
         InsertPosition: UE.ToolMenuInsert;
         bShouldCloseWindowAfterMenuSelection: boolean;
         ScriptObject: UE.ToolMenuEntryScript;
-        static InitComboButton(p0: string, p1: (p0:ToolMenuContext) => void, p2: (p0:ToolMenu) => void, p3?: string, p4?: string, p5?: cpp.FSlateIcon) : ToolMenuEntry;
-        static InitMenuEntry(p0: string, p1: string, p2: string, p3: (p0:ToolMenuContext) => void) : ToolMenuEntry;
-        static InitToolBarButton(p0: string, p1: string, p2: (p0:ToolMenuContext) => void) : ToolMenuEntry;
+        static InitComboButton(p0: string, p1: (p0:UE.ToolMenuContext) => void, p2: (p0:UE.ToolMenu) => void, p3?: string, p4?: string, p5?: cpp.FSlateIcon) : ToolMenuEntry;
+        static InitMenuEntry(p0: string, p1: string, p2: string, p3: (p0:UE.ToolMenuContext) => void) : ToolMenuEntry;
+        static InitToolBarButton(p0: string, p1: string, p2: (p0:UE.ToolMenuContext) => void) : ToolMenuEntry;
         /**
          * @deprecated use StaticStruct instead.
          */
@@ -46561,20 +46585,6 @@ declare module "ue" {
         static Load(InName: string): ImguiCustomDetailService;
     
         __tid_ImguiCustomDetailService__: boolean;
-    }
-    
-    class ImguiDetailCustomization extends UE.Object {
-        constructor(Outer?: Object, Name?: string, ObjectFlags?: number);
-        GetSupportClass() : UE.Class;
-        OnEditMultiObject(InObjects: TArray<UE.Object>) : void;
-        OnEditSingleObject(InObject: $Nullable<UE.Object>) : void;
-        SupportMultiObjectEditing() : boolean;
-        SupportSingleObjectEditing() : boolean;
-        static StaticClass(): Class;
-        static Find(OrigInName: string, Outer?: Object): ImguiDetailCustomization;
-        static Load(InName: string): ImguiDetailCustomization;
-    
-        __tid_ImguiDetailCustomization__: boolean;
     }
     
     class ImguiInputAdapter extends UE.Object {

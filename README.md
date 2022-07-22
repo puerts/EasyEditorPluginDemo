@@ -10,3 +10,8 @@
 
 * 打开vs工程（window）或者xcode工程（mac），运行
 
+
+## 怎么看
+
+代码在[EasyEditorDemo](EasyEditorDemo)，纯ts工程，用vscode打开改目录即可。
+
