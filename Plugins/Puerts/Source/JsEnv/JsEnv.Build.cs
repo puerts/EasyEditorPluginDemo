@@ -18,7 +18,7 @@ public class JsEnv : ModuleRules
         false;
 #endif
 
-    private bool UseNodejs = true;
+    private bool UseNodejs = false;
 
     private bool UseQuickjs = false;
 
