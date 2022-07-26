@@ -1,0 +1,9 @@
+{
+  "name": "EasyEditorDemo",
+  "version": "1.0.0",
+  "description": "EasyEditorDemo",
+  "scripts": {},
+  "dependencies": {
+    "@types/node": "^10.14.13"
+  }
+}

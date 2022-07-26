@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const UE = require("ue");
 const cpp = require("cpp");
 const DemoWindow_1 = require("./DemoWindow");
+const NodejsDemo_1 = require("./NodejsDemo");
 const puerts_1 = require("puerts");
 //EasyEditorPlugin.SetEval(eval); //全局执行一次即可，让c++有执行一段js代码文本的能力
 const menus = UE.ToolMenus.Get();
@@ -17,6 +18,13 @@ if (!main_menu) {
     {
         const entry = UE.ToolMenuEntry.InitMenuEntry("ShowDemoWindow", "ShowDemoWindow", "just a test...", () => {
             let demo = new DemoWindow_1.DemoWindow();
+            cpp.UEImGui.AddGlobalWindow(demo.Render.bind(demo));
+        });
+        script_menu.AddMenuEntry("Scripts", entry);
+    }
+    {
+        const entry = UE.ToolMenuEntry.InitMenuEntry("ShowNodeJsDemo", "ShowNodeJsDemo", "just a test...", () => {
+            let demo = new NodejsDemo_1.NodeDemoWindow();
             cpp.UEImGui.AddGlobalWindow(demo.Render.bind(demo));
         });
         script_menu.AddMenuEntry("Scripts", entry);
