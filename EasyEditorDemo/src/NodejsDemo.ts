@@ -1,5 +1,5 @@
-import {ImGui, ImVec2, ImGuiInputTextCallbackData} from 'cpp'
-import {$ref, $unref, $set, toCString, toCPtrArray, $Ref} from 'puerts';
+import {ImGui, ImVec2} from 'cpp'
+import {$ref, $unref, toCString} from 'puerts';
 import * as fs from 'fs'
 import * as UE from 'ue'
 
