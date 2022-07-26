@@ -19,6 +19,8 @@ class DemoWindow {
 
     counter:number;
 
+    isOpened = $ref(true);
+
     constructor() {
         this.simple_window_titil = toCString("Simple Window"); // faster than passing a string
         this.fruits = [ "Apple", "Banana", "Cherry", "Kiwi", "Mango", "Orange", "Pineapple", "Strawberry", "Watermelon"];
@@ -45,9 +47,8 @@ class DemoWindow {
     }
 
     Render() : boolean {
-        let isOpened = $ref(true);
         ImGui.SetNextWindowSize(new ImVec2(200, 100), 1 << 2)
-        ImGui.Begin(this.simple_window_titil, isOpened);
+        ImGui.Begin(this.simple_window_titil, this.isOpened);
     
         ImGui.Text("Hello, world!");
         ImGui.SliderFloat("float", this.f, 0.0, 1.0);
@@ -81,7 +82,7 @@ class DemoWindow {
             console.log(`counter:${this.counter}!`);
         }
     
-        return $unref(isOpened);
+        return $unref(this.isOpened);
     }
 }
 

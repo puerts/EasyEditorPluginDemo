@@ -11,21 +11,31 @@ const main_menu = menus.FindMenu("LevelEditor.MainMenu");
 if (!main_menu) {
     throw new Error("Failed to find the 'Main' menu. Something is wrong in the force!");
 }
+let demo = undefined;
+let nodedemo = undefined;
 //主菜单
 {
     const script_menu = main_menu.AddSubMenuScript(main_menu.GetName(), "Puerts", "Puerts", "Puerts", "Puerts Demo...");
     //添加菜单
     {
         const entry = UE.ToolMenuEntry.InitMenuEntry("ShowDemoWindow", "ShowDemoWindow", "just a test...", () => {
-            let demo = new DemoWindow_1.DemoWindow();
+            if (demo && puerts_1.$unref(demo.isOpened)) {
+                console.log('demo window opened yet');
+                return;
+            }
+            demo = new DemoWindow_1.DemoWindow();
             cpp.UEImGui.AddGlobalWindow(demo.Render.bind(demo));
         });
         script_menu.AddMenuEntry("Scripts", entry);
     }
     {
         const entry = UE.ToolMenuEntry.InitMenuEntry("ShowNodeJsDemo", "ShowNodeJsDemo", "just a test...", () => {
-            let demo = new NodejsDemo_1.NodeDemoWindow();
-            cpp.UEImGui.AddGlobalWindow(demo.Render.bind(demo));
+            if (nodedemo && puerts_1.$unref(nodedemo.isOpened)) {
+                console.log('node demo window opened yet');
+                return;
+            }
+            nodedemo = new NodejsDemo_1.NodeDemoWindow();
+            cpp.UEImGui.AddGlobalWindow(nodedemo.Render.bind(nodedemo));
         });
         script_menu.AddMenuEntry("Scripts", entry);
     }
@@ -57,7 +67,11 @@ const toolbar = menus.FindMenu('LevelEditor.LevelEditorToolBar');
     const icon = new cpp.FSlateIcon("EditorStyle", "LevelEditor.WorldProperties", "LevelEditor.WorldProperties.Small");
     const entry = UE.ToolMenuEntry.InitComboButton("Puerts", undefined, (tool_menu) => {
         const sub_entry = UE.ToolMenuEntry.InitMenuEntry("ShowDemoWindow", "ShowDemoWindow", "just a test...", () => {
-            let demo = new DemoWindow_1.DemoWindow();
+            if (demo && puerts_1.$unref(demo.isOpened)) {
+                console.log('demo window opened yet');
+                return;
+            }
+            demo = new DemoWindow_1.DemoWindow();
             cpp.UEImGui.AddGlobalWindow(demo.Render.bind(demo));
         });
         tool_menu.AddMenuEntry("ShowDemo", sub_entry);

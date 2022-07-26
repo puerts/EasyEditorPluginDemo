@@ -4,6 +4,7 @@ const cpp_1 = require("cpp");
 const puerts_1 = require("puerts");
 class DemoWindow {
     constructor() {
+        this.isOpened = puerts_1.$ref(true);
         this.simple_window_titil = puerts_1.toCString("Simple Window"); // faster than passing a string
         this.fruits = ["Apple", "Banana", "Cherry", "Kiwi", "Mango", "Orange", "Pineapple", "Strawberry", "Watermelon"];
         this.listbox_items = this.fruits.map(puerts_1.toCString);
@@ -26,9 +27,8 @@ class DemoWindow {
         this.multi_line_text_input_size = new cpp_1.ImVec2(-Number.MIN_VALUE, cpp_1.ImGui.GetTextLineHeight() * 16);
     }
     Render() {
-        let isOpened = puerts_1.$ref(true);
         cpp_1.ImGui.SetNextWindowSize(new cpp_1.ImVec2(200, 100), 1 << 2);
-        cpp_1.ImGui.Begin(this.simple_window_titil, isOpened);
+        cpp_1.ImGui.Begin(this.simple_window_titil, this.isOpened);
         cpp_1.ImGui.Text("Hello, world!");
         cpp_1.ImGui.SliderFloat("float", this.f, 0.0, 1.0);
         cpp_1.ImGui.ColorEdit3("clear color", this.rgb);
@@ -51,7 +51,7 @@ class DemoWindow {
         if (this.counter++ % 100 == 0) {
             console.log(`counter:${this.counter}!`);
         }
-        return puerts_1.$unref(isOpened);
+        return puerts_1.$unref(this.isOpened);
     }
 }
 exports.DemoWindow = DemoWindow;

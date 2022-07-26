@@ -10,6 +10,8 @@ class NodeDemoWindow {
     content_dir:string;
     all_files_in_content_dir:string[] = [];
 
+    isOpened = $ref(true);
+
     constructor() {
         this.simple_window_titil = toCString("Nodejs Demo"); // faster than passing a string
         this.button_text = toCString("refresh");
@@ -17,9 +19,8 @@ class NodeDemoWindow {
     }
 
     Render() : boolean {
-        let isOpened = $ref(true);
         ImGui.SetNextWindowSize(new ImVec2(200, 100), 1 << 2)
-        ImGui.Begin(this.simple_window_titil, isOpened);
+        ImGui.Begin(this.simple_window_titil, this.isOpened);
     
         if(ImGui.Button(this.button_text))
         {
@@ -37,7 +38,7 @@ class NodeDemoWindow {
 
         ImGui.End();
     
-        return $unref(isOpened);
+        return $unref(this.isOpened);
     }
 }
 

@@ -7,14 +7,14 @@ const UE = require("ue");
 class NodeDemoWindow {
     constructor() {
         this.all_files_in_content_dir = [];
+        this.isOpened = puerts_1.$ref(true);
         this.simple_window_titil = puerts_1.toCString("Nodejs Demo"); // faster than passing a string
         this.button_text = puerts_1.toCString("refresh");
         this.content_dir = UE.KismetSystemLibrary.GetProjectContentDirectory();
     }
     Render() {
-        let isOpened = puerts_1.$ref(true);
         cpp_1.ImGui.SetNextWindowSize(new cpp_1.ImVec2(200, 100), 1 << 2);
-        cpp_1.ImGui.Begin(this.simple_window_titil, isOpened);
+        cpp_1.ImGui.Begin(this.simple_window_titil, this.isOpened);
         if (cpp_1.ImGui.Button(this.button_text)) {
             this.all_files_in_content_dir = fs.readdirSync(this.content_dir);
         }
@@ -27,7 +27,7 @@ class NodeDemoWindow {
             cpp_1.ImGui.TreePop();
         }
         cpp_1.ImGui.End();
-        return puerts_1.$unref(isOpened);
+        return puerts_1.$unref(this.isOpened);
     }
 }
 exports.NodeDemoWindow = NodeDemoWindow;
