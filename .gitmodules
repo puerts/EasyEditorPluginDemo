@@ -4,3 +4,6 @@
 [submodule "Plugins/EasyEditorPlugin"]
 	path = Plugins/EasyEditorPlugin
 	url = https://github.com/puerts/EasyEditorPlugin.git
+[submodule "Plugins/EasyEditor_ImGui"]
+	path = Plugins/EasyEditor_ImGui
+	url = https://github.com/puerts/EasyEditor_ImGui.git
