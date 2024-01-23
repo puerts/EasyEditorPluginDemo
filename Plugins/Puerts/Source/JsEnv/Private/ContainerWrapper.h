@@ -22,9 +22,15 @@
 #include "v8.h"
 #pragma warning(pop)
 
-namespace puerts
+#include "NamespaceDef.h"
+
+namespace PUERTS_NAMESPACE
 {
 class FPropertyTranslator;
+FORCEINLINE int32 GetSizeWithAlignment(PropertyMacro* InProperty)
+{
+    return Align(InProperty->GetSize(), InProperty->GetMinAlignment());
+}
 
 struct FScriptArrayEx
 {
@@ -62,7 +68,7 @@ struct FScriptArrayEx
 
     FORCEINLINE static void Destruct(FScriptArray* ScriptArray, PropertyMacro* Property, int32 Index, int32 Count = 1)
     {
-        const int32 ElementSize = Property->GetSize();
+        const int32 ElementSize = GetSizeWithAlignment(Property);
         uint8* Dest = GetData(ScriptArray, ElementSize, Index);
         for (int32 i = 0; i < Count; ++i)
         {
@@ -74,7 +80,11 @@ struct FScriptArrayEx
     FORCEINLINE static void Empty(FScriptArray* ScriptArray, PropertyMacro* Property)
     {
         Destruct(ScriptArray, Property, 0, ScriptArray->Num());
-        ScriptArray->Empty(0, Property->GetSize());
+#if ENGINE_MAJOR_VERSION > 4
+        ScriptArray->Empty(0, GetSizeWithAlignment(Property), __STDCPP_DEFAULT_NEW_ALIGNMENT__);
+#else
+        ScriptArray->Empty(0, GetSizeWithAlignment(Property));
+#endif
     }
 };
 
@@ -245,28 +255,7 @@ public:
     static void New(const v8::FunctionCallbackInfo<v8::Value>& Info)
     {
         v8::Isolate* Isolate = Info.GetIsolate();
-        v8::HandleScope HandleScope(Isolate);
-        v8::Local<v8::Context> Context = Isolate->GetCurrentContext();
-
-        auto Self = Info.This();
-
-        if (Info.Length() == 2 && Info[0]->IsExternal())    // Call by Native
-        {
-            T* Ptr = reinterpret_cast<T*>(v8::Local<v8::External>::Cast(Info[0])->Value());
-            bool PassByPointer = Info[1]->BooleanValue(Isolate);
-            if (PassByPointer)
-            {
-                FV8Utils::IsolateData<IObjectMapper>(Isolate)->BindContainer(Ptr, Self, OnGarbageCollected);
-            }
-            else
-            {
-                FV8Utils::IsolateData<IObjectMapper>(Isolate)->BindContainer(Ptr, Self, OnGarbageCollectedWithFree);
-            }
-        }
-        else    // Call by js new
-        {
-            FV8Utils::ThrowException(Isolate, "Container Constructor no support yet");
-        }
+        FV8Utils::ThrowException(Isolate, "Container Constructor no support yet");
     }
 
     // TODO - 用doxygen注释
@@ -423,4 +412,4 @@ private:
 
     FORCEINLINE static void InternalGet(const v8::FunctionCallbackInfo<v8::Value>& Info, bool PassByPointer);
 };
-}    // namespace puerts
+}    // namespace PUERTS_NAMESPACE

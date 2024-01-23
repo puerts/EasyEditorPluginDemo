@@ -7,6 +7,7 @@
  */
 
 #include "TypeScriptGeneratedClass.h"
+#include "Runtime/Launch/Resources/Version.h"
 #include "PropertyMacros.h"
 #include "JSGeneratedFunction.h"
 #include "JSLogger.h"
@@ -20,7 +21,23 @@ DEFINE_FUNCTION(UTypeScriptGeneratedClass::execCallJS)
     UTypeScriptGeneratedClass* Class = Cast<UTypeScriptGeneratedClass>(Func->GetOuter());
     if (Class)
     {
-        Class->ProcessPendingConstructJob();
+#if WITH_EDITOR
+        if (Context)
+        {
+            UTypeScriptGeneratedClass* ClassMayNeedReBind = nullptr;
+            auto TempClass = Context->GetClass();
+
+            while (TempClass && (TempClass != Class) && (!ClassMayNeedReBind || !ClassMayNeedReBind->NeedReBind))
+            {
+                ClassMayNeedReBind = Cast<UTypeScriptGeneratedClass>(TempClass);
+                TempClass = TempClass->GetSuperClass();
+            }
+            if (ClassMayNeedReBind)
+            {
+                NotifyRebind(ClassMayNeedReBind);
+            }
+        }
+#endif
         auto PinedDynamicInvoker = Class->DynamicInvoker.Pin();
         if (PinedDynamicInvoker)
         {
@@ -37,25 +54,71 @@ DEFINE_FUNCTION(UTypeScriptGeneratedClass::execCallJS)
     }
 }
 
-void UTypeScriptGeneratedClass::ProcessPendingConstructJob()
+DEFINE_FUNCTION(UTypeScriptGeneratedClass::execLazyLoadCallJS)
 {
-    FScopeLock ScopeLock(&PendingConstructJobMutex);
-    if (!IsProcessingPendingConstructJob && PendingConstructInfos.Num() > 0)
+    UFunction* Function = Stack.CurrentNativeFunction ? Stack.CurrentNativeFunction : Stack.Node;
+    check(Function);
+
+    auto Class = Cast<UTypeScriptGeneratedClass>(Function->GetOuterUClassUnchecked());
+#if !WITH_EDITOR
+    auto PinedDynamicInvoker = Class->DynamicInvoker.Pin();
+    if (PinedDynamicInvoker)
     {
-        IsProcessingPendingConstructJob = true;
-        for (int Index = 0; Index < PendingConstructInfos.Num(); Index++)
+        PinedDynamicInvoker->NotifyReBind(Class);
+    }
+#else
+    NotifyRebind(Context ? Context->GetClass() : Class);
+#endif
+    Class->RestoreNativeFunc();
+    execCallJS(Context, Stack, RESULT_PARAM);
+}
+
+#if WITH_EDITOR
+void UTypeScriptGeneratedClass::NotifyRebind(UClass* Class)
+{
+    if (Class->ClassConstructor == &UTypeScriptGeneratedClass::StaticConstructor)
+    {
+        while (Class)
         {
-            PendingConstructInfos[Index].Ref.Reset();
-            auto ExecFunction = PendingConstructInfos[Index].Func;
-            if (!ExecFunction)
-                continue;
-            PendingConstructInfos[Index].Func = nullptr;
-            ExecFunction();
+            if (UTypeScriptGeneratedClass* TsClass = Cast<UTypeScriptGeneratedClass>(Class))
+            {
+                if (TsClass->NeedReBind && TsClass->DynamicInvoker.IsValid())
+                {
+                    TsClass->NeedReBind = false;
+                    UTypeScriptGeneratedClass* CachedClass = TsClass;
+                    Class = Class->GetSuperClass();
+                    while (Class)
+                    {
+                        if (UTypeScriptGeneratedClass* SuperTsClass = Cast<UTypeScriptGeneratedClass>(Class))
+                        {
+                            SuperTsClass->NeedReBind = false;
+                        }
+                        Class = Class->GetSuperClass();
+                    }
+                    CachedClass->DynamicInvoker.Pin()->NotifyReBind(CachedClass);
+                }
+                return;
+            }
+            Class = Class->GetSuperClass();
         }
-        PendingConstructInfos.Empty();
-        IsProcessingPendingConstructJob = false;
     }
 }
+
+void UTypeScriptGeneratedClass::LazyLoadRedirect()
+{
+    for (TFieldIterator<UFunction> FuncIt(this, EFieldIteratorFlags::ExcludeSuper); FuncIt; ++FuncIt)
+    {
+        auto Function = *FuncIt;
+        if (!FunctionToRedirect.Contains(Function->GetFName()))
+        {
+            continue;
+        }
+        Function->FunctionFlags |= FUNC_BlueprintCallable | FUNC_BlueprintEvent | FUNC_Public | FUNC_Native;
+        Function->SetNativeFunc(&UTypeScriptGeneratedClass::execLazyLoadCallJS);
+        AddNativeFunction(*Function->GetName(), &UTypeScriptGeneratedClass::execLazyLoadCallJS);
+    }
+}
+#endif
 
 void UTypeScriptGeneratedClass::StaticConstructor(const FObjectInitializer& ObjectInitializer)
 {
@@ -71,6 +134,23 @@ void UTypeScriptGeneratedClass::StaticConstructor(const FObjectInitializer& Obje
         }
         Class = Class->GetSuperClass();
     }
+}
+
+void UTypeScriptGeneratedClass::RestoreNativeFunc()
+{
+    for (auto& KV : TempNativeFuncStorage)
+    {
+        if (!FunctionToRedirect.Contains(KV.Key))
+        {
+            auto Function = FindFunctionByName(KV.Key, EIncludeSuperFlag::ExcludeSuper);
+            if (Function)
+            {
+                Function->SetNativeFunc(KV.Value);
+                AddNativeFunction(*Function->GetName(), KV.Value);
+            }
+        }
+    }
+    TempNativeFuncStorage.Empty();
 }
 
 void UTypeScriptGeneratedClass::ObjectInitialize(const FObjectInitializer& ObjectInitializer)
@@ -90,89 +170,37 @@ void UTypeScriptGeneratedClass::ObjectInitialize(const FObjectInitializer& Objec
         return;
 #endif
 
+    auto PinedDynamicInvoker = DynamicInvoker.Pin();
+    if (PinedDynamicInvoker)
+    {
 #ifdef THREAD_SAFE
-    auto PinedDynamicInvoker = DynamicInvoker.Pin();
-    if (PinedDynamicInvoker)
-    {
         PinedDynamicInvoker->TsConstruct(this, Object);
-    }
 #else
-    auto PinedDynamicInvoker = DynamicInvoker.Pin();
-    if (PinedDynamicInvoker)
-    {
         if (IsInGameThread())
         {
-            ProcessPendingConstructJob();
             PinedDynamicInvoker->TsConstruct(this, Object);
         }
-        else
-        {
-            FScopeLock ScopeLock(&PendingConstructJobMutex);
-
-            TWeakObjectPtr<UTypeScriptGeneratedClass> Class = this;
-            TWeakObjectPtr<UObject> Self = Object;
-            TSharedPtr<int> Ref(new int(0));
-            TWeakPtr<int> WeakRef(Ref);
-            int Index = PendingConstructInfos.Num();
-            PendingConstructInfos.AddDefaulted();
-            PendingConstructJobInfo& Info = PendingConstructInfos[Index];
-            Info.Ref = Ref;
-            Info.Func = [Class, Self, Index]()
-            {
-                if (Class.IsValid())
-                {
-                    FScopeLock ScopeLock(&Class->PendingConstructJobMutex);
-                    if (Self.IsValid() && Class->PendingConstructInfos.Num() > Index)
-                    {
-                        auto PinedDynamicInvoker = Class->DynamicInvoker.Pin();
-                        if (PinedDynamicInvoker)
-                        {
-                            PinedDynamicInvoker->TsConstruct(Class.Get(), Self.Get());
-                        }
-                        else
-                        {
-                            UE_LOG(Puerts, Error, TEXT("call delay TsConstruct of %s(%p) fail!, DynamicInvoker invalid"),
-                                *Self->GetName(), Self.Get());
-                        }
-                    }
-                    else
-                    {
-                        UE_LOG(Puerts, Error, TEXT("call delay TsConstruct fail!, Self of %s invalid"), *Class->GetName());
-                    }
-                }
-                else
-                {
-                    UE_LOG(Puerts, Error, TEXT("call delay TsConstruct fail!, Class invalid"));
-                }
-            };
-            FFunctionGraphTask::CreateAndDispatchWhenReady(
-                [Class, Self, Index, WeakRef]()
-                {
-                    if (Class.IsValid())
-                    {
-                        if (!WeakRef.IsValid())
-                            return;
-                        FScopeLock ScopeLock(&Class->PendingConstructJobMutex);
-                        if (Class->PendingConstructInfos.Num() > Index && Class->PendingConstructInfos[Index].Func)
-                        {
-                            auto ExecFunction = Class->PendingConstructInfos[Index].Func;
-                            Class->PendingConstructInfos[Index].Func = nullptr;
-                            Class->PendingConstructInfos[Index].Ref.Reset();
-                            ExecFunction();
-                        }
-                    }
-                    else
-                    {
-                        UE_LOG(Puerts, Error, TEXT("call delay TsConstruct fail!, Class invalid"));
-                    }
-                },
-                TStatId{}, nullptr, ENamedThreads::GameThread);
-        }
-    }
 #endif
+    }
     else
     {
         UE_LOG(Puerts, Error, TEXT("call TsConstruct of %s(%p) fail!, DynamicInvoker invalid"), *Object->GetName(), Object);
+    }
+
+    if (UNLIKELY(!RedirectedToTypeScript))
+    {
+        for (TFieldIterator<UFunction> FuncIt(this, EFieldIteratorFlags::ExcludeSuper); FuncIt; ++FuncIt)
+        {
+            auto Function = *FuncIt;
+            if (!Function->IsNative() && Function->HasAnyFunctionFlags(FUNC_Public))
+            {
+                TempNativeFuncStorage.Add(Function->GetFName(), Function->GetNativeFunc());
+                Function->FunctionFlags |= FUNC_Native;
+                Function->SetNativeFunc(&UTypeScriptGeneratedClass::execLazyLoadCallJS);
+                AddNativeFunction(*Function->GetName(), &UTypeScriptGeneratedClass::execLazyLoadCallJS);
+            }
+        }
+        RedirectedToTypeScript = true;
     }
 }
 
@@ -210,7 +238,8 @@ void UTypeScriptGeneratedClass::CancelRedirection()
             continue;
         }
         Function->FunctionFlags &= ~FUNC_Native;
-        Function->SetNativeFunc(ProcessInternal);
+        // Function->SetNativeFunc(ProcessInternal);
+        Function->Bind();    // the same as Function->SetNativeFunc(ProcessInternal) if no native
         NativeFunctionLookupTable.RemoveAll(
             [=](const FNativeFunctionLookup& NativeFunctionLookup) { return Function->GetFName() == NativeFunctionLookup.Name; });
     }

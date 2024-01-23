@@ -2,8 +2,8 @@
   "FileVersion": 3,
   "FriendlyName": "puer.ts",
   "Version": 1,
-  "VersionName": "1.0",
-  "FriendlyVersion": "1.0",
+  "VersionName": "1.0.5",
+  "FriendlyVersion": "1.0.5",
   "Description": "Javascript Runtime for unreal engine",
   "Category": "Programming",
   "CreatedBy": "Tencent Corporation",
@@ -13,6 +13,12 @@
   "CanContainContent": true,
   "CanBeUsedWithUnrealHeaderTool" : true,
   "Modules": [
+    {
+      "Name": "WasmCore",
+      "Type": "Runtime",
+      "LoadingPhase": "PreDefault",
+      "WhitelistPlatforms": [ "Win64", "Android", "Mac", "IOS", "Linux" ]
+    },
     {
       "Name": "JsEnv",
       "Type": "Runtime",
@@ -25,20 +31,20 @@
       "LoadingPhase": "Default"
     },
     {
-        "Name" : "ParamDefaultValueMetas",
-        "Type" : "Program",
-        "LoadingPhase" : "PostConfigInit"
+      "Name": "ParamDefaultValueMetas",
+      "Type": "Program",
+      "LoadingPhase": "PostConfigInit"
     },
     {
       "Name": "Puerts",
       "Type": "Runtime",
-      "LoadingPhase": "PreDefault",
+      "LoadingPhase": "PostEngineInit",
       "WhitelistPlatforms": [ "Win64", "Android", "Mac", "IOS", "Linux" ]
     },
     {
       "Name": "PuertsEditor",
       "Type": "Editor",
-      "LoadingPhase": "Default"
+      "LoadingPhase": "PostEngineInit"
     }
   ]
 }

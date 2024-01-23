@@ -31,17 +31,23 @@ class JSENV_API UTypeScriptGeneratedClass : public UBlueprintGeneratedClass
     GENERATED_BODY()
 
 public:
-    TWeakPtr<puerts::ITsDynamicInvoker> DynamicInvoker;
+    TWeakPtr<PUERTS_NAMESPACE::ITsDynamicInvoker, ESPMode::ThreadSafe> DynamicInvoker;
 
     TSet<FName> FunctionToRedirect;
 
-    FCriticalSection PendingConstructJobMutex;
+    bool RedirectedToTypeScript = false;
 
-    TArray<PendingConstructJobInfo> PendingConstructInfos;
+    TMap<FName, FNativeFuncPtr> TempNativeFuncStorage;
 
-    bool IsProcessingPendingConstructJob = false;
+#if WITH_EDITOR
+    bool NeedReBind = true;
+    TSet<TWeakObjectPtr<UObject>> GeneratedObjects;
+    bool FunctionToRedirectInitialized = false;
+    static void NotifyRebind(UClass* Class);
+    void LazyLoadRedirect();
+#endif
 
-    void ProcessPendingConstructJob();
+    DECLARE_FUNCTION(execLazyLoadCallJS);
 
     static void StaticConstructor(const FObjectInitializer& ObjectInitializer);
 
@@ -56,6 +62,8 @@ public:
     void CancelRedirection();
 
     bool NotSupportInject();
+
+    void RestoreNativeFunc();
 
     UPROPERTY()
     bool HasConstructor;

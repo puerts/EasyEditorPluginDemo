@@ -4,7 +4,7 @@ const execSync = require('child_process').execSync;
 
 //console.log(__dirname)
 
-const jsSroucePath = path.join(__dirname, 'Content/JavaScript');
+const jsSourcePath = path.join(__dirname, 'Content/JavaScript');
 const jsBasePath = path.join(__dirname, '../../Content/JavaScript');
 const tsModulePath = path.join(jsBasePath, 'PuertsEditor/node_modules/typescript');
 const tsconfigFilePath =  path.join(__dirname, '../../tsconfig.json');
@@ -15,10 +15,11 @@ const jsDefaultConfig = {
   "compilerOptions": {
     "target": "esnext",
     "module": "commonjs",
+    "experimentalDecorators": true,
     "jsx": "react",
     "sourceMap": true,
     "typeRoots": [
-      "Plugins/Puerts/Typing",
+      "Typing",
       "./node_modules/@types"
     ],
     "outDir": "Content/JavaScript"
@@ -73,14 +74,14 @@ function copyFolderRecursiveSync( source, targetFolder ) {
 
 if (!fs.existsSync(jsBasePath)) {
     console.log('copy js files');
-    copyFolderRecursiveSync(jsSroucePath, jsBasePath);
+    copyFolderRecursiveSync(jsSourcePath, jsBasePath);
 }
 
 if (!fs.existsSync(tsconfigFilePath)) {
     console.log('emit tsconfig.json');
     fs.writeFileSync(tsconfigFilePath, JSON.stringify(jsDefaultConfig, null, 4));
 } else {
-    throw new Error(tsconfigFilePath + " existed!");
+    console.warn('Warning: ' + tsconfigFilePath + " existed!");
 }
 
 if (!fs.existsSync(puertsConfigPath)) {

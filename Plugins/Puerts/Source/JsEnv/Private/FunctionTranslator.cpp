@@ -16,7 +16,11 @@ static TMap<FName, TMap<FName, TMap<FName, FString>>> ParamDefaultMetas;
 static TMap<FName, TMap<FName, FString>>* PC = nullptr;
 static TMap<FName, FString>* PF = nullptr;
 
+#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 2
+UE_DISABLE_OPTIMIZATION
+#else
 PRAGMA_DISABLE_OPTIMIZATION
+#endif
 static void ParamDefaultMetasInit()
 {
     // PC = &ParamDefaultMetas.Add(TEXT("MainObject"));
@@ -27,7 +31,11 @@ static void ParamDefaultMetasInit()
 #include "InitParamDefaultMetas.inl"
     return;
 }
+#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 2
+UE_ENABLE_OPTIMIZATION
+#else
 PRAGMA_ENABLE_OPTIMIZATION
+#endif
 
 std::once_flag ParamDefaultMetasInitFlag;
 
@@ -43,7 +51,7 @@ TMap<FName, FString>* GetParamDefaultMetaFor(UFunction* InFunction)
     return nullptr;
 }
 
-namespace puerts
+namespace PUERTS_NAMESPACE
 {
 static const int ARG_ARRAY_SIZE = 8;
 
@@ -107,9 +115,17 @@ void FFunctionTranslator::Init(UFunction* InFunction, bool IsDelegate)
         IsStatic = InFunction->HasAnyFunctionFlags(FUNC_Static);
     }
     Arguments.clear();
+
+    SkipWorldContextInArg0 = false;
     for (TFieldIterator<PropertyMacro> It(InFunction); It && (It->PropertyFlags & CPF_Parm); ++It)
     {
         PropertyMacro* Property = *It;
+        static const FName WorldContextPinName(TEXT("__WorldContext"));
+        if (IsStatic && !InFunction->IsNative() && Property->GetFName() == WorldContextPinName && Arguments.size() == 0)
+        {
+            SkipWorldContextInArg0 = true;
+            ;
+        }
         if (Property->HasAnyPropertyFlags(CPF_ReturnParm))
         {
             Return = FPropertyTranslator::Create(Property);
@@ -182,7 +198,11 @@ void FFunctionTranslator::Init(UFunction* InFunction, bool IsDelegate)
                                 }
                             }
 
+#if ENGINE_MINOR_VERSION > 0 && ENGINE_MAJOR_VERSION > 4
+                            Property->ImportText_Direct(**DefaultValuePtr, PropValuePtr, nullptr, PPF_None);
+#else
                             Property->ImportText(**DefaultValuePtr, PropValuePtr, PPF_None, nullptr);
+#endif
                         }
                     }
                 }
@@ -193,8 +213,7 @@ void FFunctionTranslator::Init(UFunction* InFunction, bool IsDelegate)
 
 v8::Local<v8::FunctionTemplate> FFunctionTranslator::ToFunctionTemplate(v8::Isolate* Isolate)
 {
-    v8::EscapableHandleScope HandleScope(Isolate);
-    return HandleScope.Escape(v8::FunctionTemplate::New(Isolate, Call, v8::External::New(Isolate, this)));
+    return v8::FunctionTemplate::New(Isolate, Call, v8::External::New(Isolate, this));
 }
 
 void FFunctionTranslator::Call(const v8::FunctionCallbackInfo<v8::Value>& Info)
@@ -242,6 +261,40 @@ void FFunctionTranslator::Call(
         Init(CallFunction.Get(), false);
     }
 #endif
+
+    auto CallFunctionPtr = CallFunction.Get();
+    if ((Function->FunctionFlags & FUNC_Native) && !(Function->FunctionFlags & FUNC_Net) &&
+        !CallFunctionPtr->HasAnyFunctionFlags(FUNC_UbergraphFunction))
+    {
+        FastCall(Isolate, Context, Info, CallObject, CallFunctionPtr, Params);
+    }
+    else
+    {
+        SlowCall(Isolate, Context, Info, CallObject, CallFunctionPtr, Params);
+    }
+}
+
+void FFunctionTranslator::SlowCall(v8::Isolate* Isolate, v8::Local<v8::Context>& Context,
+    const v8::FunctionCallbackInfo<v8::Value>& Info, UObject* CallObject, UFunction* CallFunction, void* Params)
+{
+    if (Params)
+    {
+        FMemory::Memzero(Params, ParamsBufferSize);
+    }
+
+    if (!Call_ProcessParams(Isolate, Context, Info, Params, 0))
+    {
+        return;
+    }
+
+    CallObject->UObject::ProcessEvent(CallFunction, Params);
+
+    Call_ProcessReturnAndOutParams(Isolate, Context, Info, Params, 0);
+}
+
+void FFunctionTranslator::FastCall(v8::Isolate* Isolate, v8::Local<v8::Context>& Context,
+    const v8::FunctionCallbackInfo<v8::Value>& Info, UObject* CallObject, UFunction* CallFunction, void* Params)
+{
     if (Params)
     {
         FMemory::Memzero(Params, ParamsBufferSize);
@@ -250,23 +303,87 @@ void FFunctionTranslator::Call(
             Return->Property->InitializeValue_InContainer(Params);
         }
     }
-    for (int i = 0; i < Arguments.size(); ++i)
+    FFrame NewStack(CallObject, CallFunction, Params, nullptr,
+#if ENGINE_MINOR_VERSION >= 25 || ENGINE_MAJOR_VERSION > 4
+        Function->ChildProperties
+#else
+        Function->Children
+#endif
+    );
+
+    checkSlow(NewStack.Locals || Function->ParmsSize == 0);
+    FOutParmRec** LastOut = &NewStack.OutParms;
+    int Index = 0;
+    for (TFieldIterator<PropertyMacro> It(CallFunction); It && (It->PropertyFlags & CPF_Parm); ++It)
     {
-        if (Arguments[i]->ParamShallowCopySize == 0)
+        PropertyMacro* Property = *It;
+        FOutParmRec* Out = nullptr;
+        if (Property->HasAnyPropertyFlags(CPF_OutParm))
         {
-            Arguments[i]->Property->InitializeValue_InContainer(Params);
+            CA_SUPPRESS(6263)
+            Out = (FOutParmRec*) FMemory_Alloca(sizeof(FOutParmRec));
+            Out->Property = Property;
+
+            if (*LastOut)
+            {
+                (*LastOut)->NextOutParm = Out;
+                LastOut = &(*LastOut)->NextOutParm;
+            }
+            else
+            {
+                *LastOut = Out;
+            }
         }
-        if (UNLIKELY(ArgumentDefaultValues && Info[i]->IsUndefined()))
+
+        if (Property->HasAnyPropertyFlags(CPF_ReturnParm))
         {
-            Arguments[i]->Property->CopyCompleteValue_InContainer(Params, ArgumentDefaultValues);
+            if (Property->HasAnyPropertyFlags(CPF_OutParm))
+            {
+                Out->PropAddr = Property->ContainerPtrToValuePtr<uint8>(Params);
+            }
+            continue;
         }
-        else if (!Arguments[i]->JsToUEInContainer(Isolate, Context, Info[i], Params, false))
+
+        if (UNLIKELY(ArgumentDefaultValues && Info[Index]->IsUndefined()))
         {
-            return;
+            Property->CopyCompleteValue_InContainer(Params, ArgumentDefaultValues);
+            if (Property->HasAnyPropertyFlags(CPF_OutParm))
+            {
+                Out->PropAddr = Property->ContainerPtrToValuePtr<uint8>(Params);
+            }
+        }
+        else
+        {
+            Property->InitializeValue_InContainer(Params);
+            if (Property->HasAnyPropertyFlags(CPF_OutParm))
+            {
+                if (!Arguments[Index]->JsToUEFastInContainer(
+                        Isolate, Context, Info[Index], Params, reinterpret_cast<void**>(&(Out->PropAddr))))
+                {
+                    return;
+                }
+            }
+            else
+            {
+                if (!Arguments[Index]->JsToUEInContainer(Isolate, Context, Info[Index], Params, false))
+                {
+                    return;
+                }
+            }
+        }
+        ++Index;
+    }
+    if (CallFunction->HasAnyFunctionFlags(FUNC_HasOutParms))
+    {
+        if (*LastOut)
+        {
+            (*LastOut)->NextOutParm = NULL;
         }
     }
 
-    CallObject->UObject::ProcessEvent(CallFunction.Get(), Params);
+    const bool bHasReturnParam = CallFunction->ReturnValueOffset != MAX_uint16;
+    uint8* ReturnValueAddress = bHasReturnParam ? ((uint8*) Params + CallFunction->ReturnValueOffset) : nullptr;
+    CallFunction->Invoke(CallObject, NewStack, ReturnValueAddress);
 
     if (Return)
     {
@@ -274,9 +391,26 @@ void FFunctionTranslator::Call(
         Return->Property->DestroyValue_InContainer(Params);
     }
 
+    LastOut = &NewStack.OutParms;
     for (int i = 0; i < Arguments.size(); ++i)
     {
-        Arguments[i]->UEOutToJsInContainer(Isolate, Context, Info[i], Params, false);
+        auto PropertyFlags = Arguments[i]->Property->PropertyFlags;
+        if (PropertyFlags & CPF_OutParm)
+        {
+            if ((PropertyFlags & CPF_Parm) && (!(PropertyFlags & CPF_ConstParm)) && (!(PropertyFlags & CPF_ReturnParm)))
+            {
+                if ((*LastOut)->PropAddr >= (uint8*) Params && (*LastOut)->PropAddr < ((uint8*) Params + ParamsBufferSize))
+                {
+                    Arguments[i]->UEOutToJsInContainer(Isolate, Context, Info[i], Params, false);
+                }
+                else
+                {
+                    LastOut = &(*LastOut)->NextOutParm;
+                    continue;
+                }
+            }
+            LastOut = &(*LastOut)->NextOutParm;
+        }
         if (Arguments[i]->ParamShallowCopySize == 0)
         {
             Arguments[i]->Property->DestroyValue_InContainer(Params);
@@ -292,39 +426,14 @@ void FFunctionTranslator::Call(v8::Isolate* Isolate, v8::Local<v8::Context>& Con
 #else
     void* Params = ParamsBufferSize > 0 ? FMemory_Alloca(ParamsBufferSize) : nullptr;
 #endif
-
     if (Params)
-    {
         FMemory::Memzero(Params, ParamsBufferSize);
-    }
-    for (int i = 0; i < Arguments.size(); ++i)
-    {
-        if (Arguments[i]->ParamShallowCopySize == 0)
-        {
-            Arguments[i]->Property->InitializeValue_InContainer(Params);
-        }
-        if (!Arguments[i]->JsToUEInContainer(Isolate, Context, Info[i], Params, false))
-        {
-            return;
-        }
-    }
+
+    Call_ProcessParams(Isolate, Context, Info, Params, 0);
 
     OnCall(Params);
 
-    if (Return)
-    {
-        Info.GetReturnValue().Set(Return->UEToJsInContainer(Isolate, Context, Params));
-        Return->Property->DestroyValue_InContainer(Params);
-    }
-
-    for (int i = 0; i < Arguments.size(); ++i)
-    {
-        Arguments[i]->UEOutToJsInContainer(Isolate, Context, Info[i], Params, false);
-        if (Arguments[i]->ParamShallowCopySize == 0)
-        {
-            Arguments[i]->Property->DestroyValue_InContainer(Params);
-        }
-    }
+    Call_ProcessReturnAndOutParams(Isolate, Context, Info, Params, 0);
 }
 
 void FFunctionTranslator::CallJs(v8::Isolate* Isolate, v8::Local<v8::Context>& Context, v8::Local<v8::Function> JsFunction,
@@ -337,7 +446,16 @@ void FFunctionTranslator::CallJs(v8::Isolate* Isolate, v8::Local<v8::Context>& C
     {
         Args[i] = Arguments[i]->UEToJsInContainer(Isolate, Context, Params, false);
     }
-    auto Result = JsFunction->Call(Context, This, Arguments.size(), Args);
+
+    v8::MaybeLocal<v8::Value> Result;
+    if (UNLIKELY(SkipWorldContextInArg0))
+    {
+        Result = JsFunction->Call(Context, This, Arguments.size() - 1, &Args[0] + 1);
+    }
+    else
+    {
+        Result = JsFunction->Call(Context, This, Arguments.size(), Args);
+    }
 
     if (!Result.IsEmpty())    // empty mean exception
     {
@@ -372,9 +490,11 @@ void FFunctionTranslator::CallJs(v8::Isolate* Isolate, v8::Local<v8::Context>& C
 {
     void* Params = Stack.Locals;
 
-    auto OldOutParms = Stack.OutParms;
+    FOutParmRec* NewOutParms = nullptr;
 
-    if (Stack.Node != Stack.CurrentNativeFunction)
+    const bool CallByBP = Stack.Node != Stack.CurrentNativeFunction;
+
+    if (CallByBP)
     {
 #if defined(USE_GLOBAL_PARAMS_BUFFER)
         void* Params = Buffer;
@@ -384,9 +504,9 @@ void FFunctionTranslator::CallJs(v8::Isolate* Isolate, v8::Local<v8::Context>& C
 
         if (Params)
         {
-            FOutParmRec** LastOut = nullptr;
-            if (!Stack.OutParms)
-                LastOut = &Stack.OutParms;
+            FMemory::Memzero(Params, ParamsBufferSize);
+            FOutParmRec** LastOut = &NewOutParms;
+
             // ScriptCore.cpp
             for (PropertyMacro* Property = (PropertyMacro*) (
 #if ENGINE_MINOR_VERSION >= 25 || ENGINE_MAJOR_VERSION > 4
@@ -449,9 +569,31 @@ void FFunctionTranslator::CallJs(v8::Isolate* Isolate, v8::Local<v8::Context>& C
     FMemory::Memset(Args, 0, sizeof(v8::Local<v8::Value>) * Arguments.size());
     for (int i = 0; i < Arguments.size(); ++i)
     {
+        const auto Property = Arguments[i]->Property;
+        if (!CallByBP && (Property->PropertyFlags & CPF_OutParm) && Stack.OutParms)    // may be fast call
+        {
+            FOutParmRec* Out = Stack.OutParms;
+
+            while (Out->Property != Property)
+            {
+                Out = Out->NextOutParm;
+                checkSlow(Out);
+            }
+            Args[i] = Arguments[i]->UEToJs(Isolate, Context, Out->PropAddr, false);
+            continue;
+        }
         Args[i] = Arguments[i]->UEToJsInContainer(Isolate, Context, Params, false);
     }
-    auto Result = JsFunction->Call(Context, This, Arguments.size(), Args);
+
+    v8::MaybeLocal<v8::Value> Result;
+    if (UNLIKELY(SkipWorldContextInArg0))
+    {
+        Result = JsFunction->Call(Context, This, Arguments.size() - 1, &Args[0] + 1);
+    }
+    else
+    {
+        Result = JsFunction->Call(Context, This, Arguments.size(), Args);
+    }
 
     if (!Result.IsEmpty())    // empty mean exception
     {
@@ -460,11 +602,13 @@ void FFunctionTranslator::CallJs(v8::Isolate* Isolate, v8::Local<v8::Context>& C
             Return->JsToUE(Isolate, Context, Result.ToLocalChecked(), RESULT_PARAM, true);
         }
 
+        auto OutParms = NewOutParms ? NewOutParms : Stack.OutParms;
+
         for (int i = 0; i < Arguments.size(); ++i)
         {
             if (Arguments[i]->IsOut())
             {
-                auto OutParmRec = GetMatchOutParmRec(Stack.OutParms, Arguments[i]->Property);
+                auto OutParmRec = GetMatchOutParmRec(OutParms, Arguments[i]->Property);
                 if (OutParmRec)
                 {
                     Arguments[i]->JsToUEOut(Isolate, Context, Args[i], OutParmRec->PropAddr, true);
@@ -472,7 +616,23 @@ void FFunctionTranslator::CallJs(v8::Isolate* Isolate, v8::Local<v8::Context>& C
             }
         }
     }
-    Stack.OutParms = OldOutParms;
+
+    if (Params && Params != Stack.Locals)
+    {
+        // destruct properties on the stack, except for out params since we know we didn't use that memory
+        for (PropertyMacro* Destruct = Function->DestructorLink; Destruct; Destruct = Destruct->DestructorLinkNext)
+        {
+            if (!Destruct->HasAnyPropertyFlags(CPF_OutParm))
+            {
+                Destruct->DestroyValue_InContainer(Params);
+            }
+        }
+    }
+}
+
+bool FFunctionTranslator::IsValid() const
+{
+    return Function.IsValid();
 }
 
 FExtensionMethodTranslator::FExtensionMethodTranslator(UFunction* InFunction) : FFunctionTranslator(InFunction, false)
@@ -485,8 +645,7 @@ FExtensionMethodTranslator::FExtensionMethodTranslator(UFunction* InFunction) : 
 
 v8::Local<v8::FunctionTemplate> FExtensionMethodTranslator::ToFunctionTemplate(v8::Isolate* Isolate)
 {
-    v8::EscapableHandleScope HandleScope(Isolate);
-    return HandleScope.Escape(v8::FunctionTemplate::New(Isolate, CallExtension, v8::External::New(Isolate, this)));
+    return v8::FunctionTemplate::New(Isolate, CallExtension, v8::External::New(Isolate, this));
 }
 
 void FExtensionMethodTranslator::CallExtension(const v8::FunctionCallbackInfo<v8::Value>& Info)
@@ -578,4 +737,4 @@ void FExtensionMethodTranslator::CallExtension(
         }
     }
 }
-};    // namespace puerts
+};    // namespace PUERTS_NAMESPACE

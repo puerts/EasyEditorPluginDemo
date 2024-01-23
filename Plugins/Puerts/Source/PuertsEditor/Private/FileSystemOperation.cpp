@@ -3,9 +3,17 @@
 #include "FileSystemOperation.h"
 #include "Misc/Paths.h"
 #include "Misc/FileHelper.h"
+#include "Misc/EngineVersionComparison.h"
+#if UE_VERSION_OLDER_THAN(5, 0, 0)
 #include "HAL/PlatformFilemanager.h"
+#else
+#include "HAL/PlatformFileManager.h"
+#endif
 #include "PuertsModule.h"
 #include "Misc/SecureHash.h"
+#ifdef PUERTS_WITH_SOURCE_CONTROL
+#include "SourceControlHelpers.h"
+#endif
 
 bool UFileSystemOperation::ReadFile(FString Path, FString& Data)
 {
@@ -32,6 +40,9 @@ bool UFileSystemOperation::ReadFile(FString Path, FString& Data)
 
 void UFileSystemOperation::WriteFile(FString Path, FString Data)
 {
+#ifdef PUERTS_WITH_SOURCE_CONTROL
+    PuertsSourceControlUtils::CheckoutSourceControlFile(Path);
+#endif
     FFileHelper::SaveStringToFile(Data, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 }
 
@@ -101,3 +112,30 @@ FString UFileSystemOperation::FileMD5Hash(FString Path)
 //{
 //
 //}
+
+#ifdef PUERTS_WITH_SOURCE_CONTROL
+namespace PuertsSourceControlUtils
+{
+bool MakeSourceControlFileWritable(const FString& InFileToMakeWritable)
+{
+    if (SourceControlHelpers::IsAvailable() && FPlatformFileManager::Get().GetPlatformFile().FileExists(*InFileToMakeWritable))
+    {
+        return FPlatformFileManager::Get().GetPlatformFile().SetReadOnly(*InFileToMakeWritable, false);
+    }
+    return true;
+}
+
+bool CheckoutSourceControlFile(const FString& InFileToCheckout)
+{
+    if (SourceControlHelpers::IsAvailable())
+    {
+        const FSourceControlState FileState = SourceControlHelpers::QueryFileState(InFileToCheckout);
+        if (FileState.bIsValid && FileState.bIsSourceControlled && !FileState.bCanEdit)
+        {
+            return SourceControlHelpers::CheckOutFile(InFileToCheckout);
+        }
+    }
+    return true;
+}
+}    // namespace PuertsSourceControlUtils
+#endif

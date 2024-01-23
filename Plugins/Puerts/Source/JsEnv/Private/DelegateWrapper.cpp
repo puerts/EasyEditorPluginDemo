@@ -10,11 +10,10 @@
 #include "ObjectMapper.h"
 #include "V8Utils.h"
 
-namespace puerts
+namespace PUERTS_NAMESPACE
 {
 v8::Local<v8::FunctionTemplate> FDelegateWrapper::ToFunctionTemplate(v8::Isolate* Isolate)
 {
-    v8::EscapableHandleScope HandleScope(Isolate);
     auto Result = v8::FunctionTemplate::New(Isolate, New);
     Result->InstanceTemplate()->SetInternalFieldCount(2);
 
@@ -23,7 +22,7 @@ v8::Local<v8::FunctionTemplate> FDelegateWrapper::ToFunctionTemplate(v8::Isolate
     Result->PrototypeTemplate()->Set(FV8Utils::InternalString(Isolate, "Unbind"), v8::FunctionTemplate::New(Isolate, Unbind));
     Result->PrototypeTemplate()->Set(FV8Utils::InternalString(Isolate, "Execute"), v8::FunctionTemplate::New(Isolate, Execute));
 
-    return HandleScope.Escape(Result);
+    return Result;
 }
 
 void FDelegateWrapper::New(const v8::FunctionCallbackInfo<v8::Value>& Info)
@@ -103,7 +102,6 @@ void FDelegateWrapper::Execute(const v8::FunctionCallbackInfo<v8::Value>& Info)
 
 v8::Local<v8::FunctionTemplate> FMulticastDelegateWrapper::ToFunctionTemplate(v8::Isolate* Isolate)
 {
-    v8::EscapableHandleScope HandleScope(Isolate);
     auto Result = v8::FunctionTemplate::New(Isolate, New);
     Result->InstanceTemplate()->SetInternalFieldCount(2);
 
@@ -112,7 +110,7 @@ v8::Local<v8::FunctionTemplate> FMulticastDelegateWrapper::ToFunctionTemplate(v8
     Result->PrototypeTemplate()->Set(FV8Utils::InternalString(Isolate, "Clear"), v8::FunctionTemplate::New(Isolate, Clear));
     Result->PrototypeTemplate()->Set(FV8Utils::InternalString(Isolate, "Broadcast"), v8::FunctionTemplate::New(Isolate, Broadcast));
 
-    return HandleScope.Escape(Result);
+    return Result;
 }
 
 void FMulticastDelegateWrapper::New(const v8::FunctionCallbackInfo<v8::Value>& Info)
@@ -153,7 +151,7 @@ void FMulticastDelegateWrapper::Add(const v8::FunctionCallbackInfo<v8::Value>& I
 #if ENGINE_MINOR_VERSION >= 23 || ENGINE_MAJOR_VERSION > 4
                 if (Property->IsA<MulticastSparseDelegatePropertyMacro>())
                 {
-                    Property->AddDelegate(MoveTemp(Delegate), Object, DelegatePtr);
+                    Property->AddDelegate(MoveTemp(Delegate), nullptr, DelegatePtr);
                 }
                 else
 #endif
@@ -210,4 +208,4 @@ void FMulticastDelegateWrapper::Broadcast(const v8::FunctionCallbackInfo<v8::Val
     auto DelegatePtr = FV8Utils::GetPointerFast<void>(Info.Holder(), 0);
     FV8Utils::IsolateData<IObjectMapper>(Isolate)->ExecuteDelegate(Isolate, Context, Info, DelegatePtr);
 }
-}    // namespace puerts
+}    // namespace PUERTS_NAMESPACE

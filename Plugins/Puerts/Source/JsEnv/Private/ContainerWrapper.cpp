@@ -9,12 +9,11 @@
 #include "ContainerWrapper.h"
 #include "PropertyTranslator.h"
 
-namespace puerts
+namespace PUERTS_NAMESPACE
 {
 v8::Local<v8::FunctionTemplate> FScriptArrayWrapper::ToFunctionTemplate(v8::Isolate* Isolate)
 {
     v8::Isolate::Scope Isolatescope(Isolate);
-    v8::EscapableHandleScope HandleScope(Isolate);
     auto Result = v8::FunctionTemplate::New(Isolate, New);
     Result->InstanceTemplate()->SetInternalFieldCount(4);    // 0 Ptr, 1 Property
 
@@ -30,7 +29,7 @@ v8::Local<v8::FunctionTemplate> FScriptArrayWrapper::ToFunctionTemplate(v8::Isol
         FV8Utils::InternalString(Isolate, "IsValidIndex"), v8::FunctionTemplate::New(Isolate, IsValidIndex));
     Result->PrototypeTemplate()->Set(FV8Utils::InternalString(Isolate, "Empty"), v8::FunctionTemplate::New(Isolate, Empty));
 
-    return HandleScope.Escape(Result);
+    return Result;
 }
 
 void FScriptArrayWrapper::Add(const v8::FunctionCallbackInfo<v8::Value>& Info)
@@ -49,10 +48,10 @@ void FScriptArrayWrapper::Add(const v8::FunctionCallbackInfo<v8::Value>& Info)
             return;
         }
 
-        int32 Index = AddUninitialized(Self, Inner->Property->GetSize(), Info.Length());
+        int32 Index = AddUninitialized(Self, GetSizeWithAlignment(Inner->Property), Info.Length());
         for (int i = 0; i < Info.Length(); ++i)
         {
-            uint8* DataPtr = GetData(Self, Inner->Property->GetSize(), Index + i);
+            uint8* DataPtr = GetData(Self, GetSizeWithAlignment(Inner->Property), Index + i);
             Inner->Property->InitializeValue(DataPtr);    //使用之前必须得初始化，即使是设置也要
             Inner->JsToUE(Isolate, Context, Info[i], DataPtr, false);
         }
@@ -82,8 +81,13 @@ void FScriptArrayWrapper::InternalGet(const v8::FunctionCallbackInfo<v8::Value>&
         FV8Utils::ThrowException(Isolate, TEXT("invalid index"));
         return;
     }
-    uint8* DataPtr = GetData(Self, Inner->Property->GetSize(), Index);
-    Info.GetReturnValue().Set(Inner->UEToJs(Isolate, Context, DataPtr, PassByPointer));
+    uint8* DataPtr = GetData(Self, GetSizeWithAlignment(Inner->Property), Index);
+    auto Ret = Inner->UEToJs(Isolate, Context, DataPtr, PassByPointer);
+    if (Inner->NeedLinkOuter && PassByPointer)
+    {
+        LinkOuterImpl(Context, Info.Holder(), Ret);
+    }
+    Info.GetReturnValue().Set(Ret);
 }
 
 void FScriptArrayWrapper::Get(const v8::FunctionCallbackInfo<v8::Value>& Info)
@@ -118,7 +122,7 @@ void FScriptArrayWrapper::Set(const v8::FunctionCallbackInfo<v8::Value>& Info)
         FV8Utils::ThrowException(Isolate, TEXT("invalid index"));
         return;
     }
-    uint8* DataPtr = GetData(Self, Inner->Property->GetSize(), Index);
+    uint8* DataPtr = GetData(Self, GetSizeWithAlignment(Inner->Property), Index);
     Inner->Property->InitializeValue(DataPtr);
     Inner->JsToUE(Isolate, Context, Info[1], DataPtr, false);
 }
@@ -162,7 +166,11 @@ void FScriptArrayWrapper::RemoveAt(const v8::FunctionCallbackInfo<v8::Value>& In
     else
     {
         FScriptArrayEx::Destruct(Self, Inner->Property, Index, 1);
-        Self->Remove(Index, 1, Inner->Property->GetSize());
+#if ENGINE_MAJOR_VERSION > 4
+        Self->Remove(Index, 1, GetSizeWithAlignment(Inner->Property), __STDCPP_DEFAULT_NEW_ALIGNMENT__);
+#else
+        Self->Remove(Index, 1, GetSizeWithAlignment(Inner->Property));
+#endif
     }
 }
 
@@ -198,7 +206,11 @@ void FScriptArrayWrapper::Empty(const v8::FunctionCallbackInfo<v8::Value>& Info)
 
 FORCEINLINE int32 FScriptArrayWrapper::AddUninitialized(FScriptArray* ScriptArray, int32 ElementSize, int32 Count)
 {
+#if ENGINE_MAJOR_VERSION > 4
+    return ScriptArray->Add(Count, ElementSize, __STDCPP_DEFAULT_NEW_ALIGNMENT__);
+#else
     return ScriptArray->Add(Count, ElementSize);
+#endif
 }
 
 FORCEINLINE uint8* FScriptArrayWrapper::GetData(FScriptArray* ScriptArray, int32 ElementSize, int32 Index)
@@ -208,7 +220,7 @@ FORCEINLINE uint8* FScriptArrayWrapper::GetData(FScriptArray* ScriptArray, int32
 
 FORCEINLINE void FScriptArrayWrapper::Construct(FScriptArray* ScriptArray, FPropertyTranslator* Inner, int32 Index, int32 Count)
 {
-    int32 ElementSize = Inner->Property->GetSize();
+    int32 ElementSize = GetSizeWithAlignment(Inner->Property);
     uint8* Dest = GetData(ScriptArray, ElementSize, Index);
     for (int32 i = 0; i < Count; ++i)
     {
@@ -232,7 +244,7 @@ int32 FScriptArrayWrapper::FindIndexInner(const v8::FunctionCallbackInfo<v8::Val
     }
     auto Property = Inner->Property;
 
-    void* Dest = FMemory_Alloca(Property->GetSize());
+    void* Dest = FMemory_Alloca(GetSizeWithAlignment(Property));
     Property->InitializeValue(Dest);
     Inner->JsToUE(Isolate, Context, Info[0], Dest, false);
 
@@ -240,7 +252,7 @@ int32 FScriptArrayWrapper::FindIndexInner(const v8::FunctionCallbackInfo<v8::Val
     int32 Result = INDEX_NONE;
     for (int32 i = 0; i < Num; ++i)
     {
-        uint8* Src = GetData(Self, Property->GetSize(), i);
+        uint8* Src = GetData(Self, GetSizeWithAlignment(Property), i);
         if (Property->Identical(Src, Dest))
         {
             Result = i;
@@ -256,7 +268,6 @@ int32 FScriptArrayWrapper::FindIndexInner(const v8::FunctionCallbackInfo<v8::Val
 v8::Local<v8::FunctionTemplate> FScriptSetWrapper::ToFunctionTemplate(v8::Isolate* Isolate)
 {
     v8::Isolate::Scope Isolatescope(Isolate);
-    v8::EscapableHandleScope HandleScope(Isolate);
     auto Result = v8::FunctionTemplate::New(Isolate, New);
     Result->InstanceTemplate()->SetInternalFieldCount(4);    // 0 Ptr, 1 Property
 
@@ -273,7 +284,7 @@ v8::Local<v8::FunctionTemplate> FScriptSetWrapper::ToFunctionTemplate(v8::Isolat
         FV8Utils::InternalString(Isolate, "IsValidIndex"), v8::FunctionTemplate::New(Isolate, IsValidIndex));
     Result->PrototypeTemplate()->Set(FV8Utils::InternalString(Isolate, "Empty"), v8::FunctionTemplate::New(Isolate, Empty));
 
-    return HandleScope.Escape(Result);
+    return Result;
 }
 
 void FScriptSetWrapper::Add(const v8::FunctionCallbackInfo<v8::Value>& Info)
@@ -293,7 +304,7 @@ void FScriptSetWrapper::Add(const v8::FunctionCallbackInfo<v8::Value>& Info)
     }
     auto Property = Inner->Property;
 
-    void* DataPtr = FMemory_Alloca(Property->GetSize());
+    void* DataPtr = FMemory_Alloca(GetSizeWithAlignment(Property));
     Property->InitializeValue(DataPtr);
     Inner->JsToUE(Isolate, Context, Info[0], DataPtr, false);
 
@@ -336,7 +347,12 @@ void FScriptSetWrapper::InternalGet(const v8::FunctionCallbackInfo<v8::Value>& I
     {
         auto ScriptLayout = FScriptSet::GetScriptLayout(Property->GetSize(), Property->GetMinAlignment());
         void* Data = Self->GetData(Index, ScriptLayout);
-        Info.GetReturnValue().Set(Inner->UEToJs(Isolate, Context, Data, PassByPointer));
+        auto Ret = Inner->UEToJs(Isolate, Context, Data, PassByPointer);
+        if (Inner->NeedLinkOuter && PassByPointer)
+        {
+            LinkOuterImpl(Context, Info.Holder(), Ret);
+        }
+        Info.GetReturnValue().Set(Ret);
     }
 }
 
@@ -452,7 +468,7 @@ int32 FScriptSetWrapper::FindIndexInner(const v8::FunctionCallbackInfo<v8::Value
     }
     auto Property = Inner->Property;
 
-    void* DataPtr = FMemory_Alloca(Property->GetSize());
+    void* DataPtr = FMemory_Alloca(GetSizeWithAlignment(Property));
     Property->InitializeValue(DataPtr);
 
     Inner->JsToUE(Isolate, Context, Info[0], DataPtr, false);
@@ -470,7 +486,6 @@ int32 FScriptSetWrapper::FindIndexInner(const v8::FunctionCallbackInfo<v8::Value
 v8::Local<v8::FunctionTemplate> FScriptMapWrapper::ToFunctionTemplate(v8::Isolate* Isolate)
 {
     v8::Isolate::Scope Isolatescope(Isolate);
-    v8::EscapableHandleScope HandleScope(Isolate);
     auto Result = v8::FunctionTemplate::New(Isolate, New);
     Result->InstanceTemplate()->SetInternalFieldCount(6);    // 0 Ptr, 1-2 Property
 
@@ -487,7 +502,7 @@ v8::Local<v8::FunctionTemplate> FScriptMapWrapper::ToFunctionTemplate(v8::Isolat
     Result->PrototypeTemplate()->Set(FV8Utils::InternalString(Isolate, "GetKey"), v8::FunctionTemplate::New(Isolate, GetKey));
     Result->PrototypeTemplate()->Set(FV8Utils::InternalString(Isolate, "Empty"), v8::FunctionTemplate::New(Isolate, Empty));
 
-    return HandleScope.Escape(Result);
+    return Result;
 }
 
 void FScriptMapWrapper::Add(const v8::FunctionCallbackInfo<v8::Value>& Info)
@@ -509,10 +524,10 @@ void FScriptMapWrapper::Add(const v8::FunctionCallbackInfo<v8::Value>& Info)
         return;
     }
 
-    void* KeyPtr = FMemory_Alloca(KeyProperty->GetSize());
+    void* KeyPtr = FMemory_Alloca(GetSizeWithAlignment(KeyProperty));
     KeyProperty->InitializeValue(KeyPtr);
 
-    void* ValuePtr = FMemory_Alloca(ValueProperty->GetSize());
+    void* ValuePtr = FMemory_Alloca(GetSizeWithAlignment(ValueProperty));
     ValueProperty->InitializeValue(ValuePtr);
 
     KeyPropertyTranslator->JsToUE(Isolate, Context, Info[0], KeyPtr, false);
@@ -560,7 +575,7 @@ void FScriptMapWrapper::InternalGet(const v8::FunctionCallbackInfo<v8::Value>& I
         return;
     }
 
-    void* KeyPtr = FMemory_Alloca(KeyProperty->GetSize());
+    void* KeyPtr = FMemory_Alloca(GetSizeWithAlignment(KeyProperty));
     KeyProperty->InitializeValue(KeyPtr);
     KeyPropertyTranslator->JsToUE(Isolate, Context, Info[0], KeyPtr, false);
 
@@ -573,7 +588,12 @@ void FScriptMapWrapper::InternalGet(const v8::FunctionCallbackInfo<v8::Value>& I
 
     if (ValuePtr)
     {
-        Info.GetReturnValue().Set(ValuePropertyTranslator->UEToJs(Isolate, Context, ValuePtr, PassByPointer));
+        auto Ret = ValuePropertyTranslator->UEToJs(Isolate, Context, ValuePtr, PassByPointer);
+        if (ValuePropertyTranslator->NeedLinkOuter && PassByPointer)
+        {
+            LinkOuterImpl(Context, Info.Holder(), Ret);
+        }
+        Info.GetReturnValue().Set(Ret);
     }
     KeyProperty->DestroyValue(KeyPtr);
 }
@@ -612,7 +632,7 @@ void FScriptMapWrapper::Remove(const v8::FunctionCallbackInfo<v8::Value>& Info)
         return;
     }
 
-    void* KeyPtr = FMemory_Alloca(KeyProperty->GetSize());
+    void* KeyPtr = FMemory_Alloca(GetSizeWithAlignment(KeyProperty));
     KeyProperty->InitializeValue(KeyPtr);
     KeyPropertyTranslator->JsToUE(Isolate, Context, Info[0], KeyPtr, false);
 
@@ -720,7 +740,6 @@ FScriptMapLayout FScriptMapWrapper::GetScriptLayout(const PropertyMacro* KeyProp
 v8::Local<v8::FunctionTemplate> FFixSizeArrayWrapper::ToFunctionTemplate(v8::Isolate* Isolate)
 {
     v8::Isolate::Scope Isolatescope(Isolate);
-    v8::EscapableHandleScope HandleScope(Isolate);
     auto Result = v8::FunctionTemplate::New(Isolate, New);
     Result->InstanceTemplate()->SetInternalFieldCount(4);    // 0 Ptr, 1 Property
 
@@ -730,7 +749,7 @@ v8::Local<v8::FunctionTemplate> FFixSizeArrayWrapper::ToFunctionTemplate(v8::Iso
     Result->PrototypeTemplate()->Set(FV8Utils::InternalString(Isolate, "Set"), v8::FunctionTemplate::New(Isolate, Set));
     // Result->PrototypeTemplate()->SetIndexedPropertyHandler(Getter, Setter);
 
-    return HandleScope.Escape(Result);
+    return Result;
 }
 
 void FFixSizeArrayWrapper::Num(const v8::FunctionCallbackInfo<v8::Value>& Info)
@@ -778,7 +797,12 @@ void FFixSizeArrayWrapper::InternalGet(const v8::FunctionCallbackInfo<v8::Value>
 
     auto Ptr = Self + Property->ElementSize * Index;
 
-    Info.GetReturnValue().Set(Inner->UEToJs(Isolate, Context, Ptr, false));
+    auto Ret = Inner->UEToJs(Isolate, Context, Ptr, PassByPointer);
+    if (Inner->NeedLinkOuter && PassByPointer)
+    {
+        LinkOuterImpl(Context, Info.Holder(), Ret);
+    }
+    Info.GetReturnValue().Set(Ret);
 }
 
 void FFixSizeArrayWrapper::Get(const v8::FunctionCallbackInfo<v8::Value>& Info)
@@ -823,4 +847,4 @@ void FFixSizeArrayWrapper::Set(const v8::FunctionCallbackInfo<v8::Value>& Info)
 
     Inner->JsToUE(Isolate, Context, Info[1], Ptr, true);
 }
-}    // namespace puerts
+}    // namespace PUERTS_NAMESPACE

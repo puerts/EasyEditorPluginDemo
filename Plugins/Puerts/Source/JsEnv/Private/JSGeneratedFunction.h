@@ -15,6 +15,8 @@
 #include "v8.h"
 #pragma warning(pop)
 
+#include "NamespaceDef.h"
+
 #include "DynamicInvoker.h"
 #include "FunctionTranslator.h"
 
@@ -37,9 +39,9 @@ public:
 
     v8::UniquePersistent<v8::Function> JsFunction;
 
-    TWeakPtr<puerts::IDynamicInvoker> DynamicInvoker;
+    TWeakPtr<PUERTS_NAMESPACE::IDynamicInvoker, ESPMode::ThreadSafe> DynamicInvoker;
 
-    std::unique_ptr<puerts::FFunctionTranslator> FunctionTranslator;
+    std::unique_ptr<PUERTS_NAMESPACE::FFunctionTranslator> FunctionTranslator;
 
     bool TakeJsObjectRef;
 
@@ -48,4 +50,29 @@ public:
     FNativeFuncPtr OriginalFunc = nullptr;
 
     EFunctionFlags OriginalFunctionFlags;
+
+    static constexpr uint8 GEN_FUNC_MAGIC = 107;
+
+    FORCEINLINE static void SetJSGeneratedFunctionToScript(UFunction* InFunc, UJSGeneratedFunction* JsGenFunc)
+    {
+        JsGenFunc->Script = InFunc->Script;
+        InFunc->Script.Empty();
+        InFunc->Script.AddUninitialized(3 + sizeof(int64));
+        uint8* Code = InFunc->Script.GetData();
+        *(Code++) = EX_ByteConst;
+        *(Code++) = GEN_FUNC_MAGIC;
+        *(Code++) = EX_Int64Const;
+        FPlatformMemory::WriteUnaligned<UJSGeneratedFunction*>(Code, JsGenFunc);
+    }
+
+    FORCEINLINE static UJSGeneratedFunction* GetJSGeneratedFunctionFromScript(UFunction* InFunc)
+    {
+        const uint8* Code = InFunc->Script.GetData();
+        if (Code && InFunc->Script.Num() >= (3 + sizeof(int64)) && EX_ByteConst == Code[0] && GEN_FUNC_MAGIC == Code[1] &&
+            EX_Int64Const == Code[2])
+        {
+            return FPlatformMemory::ReadUnaligned<UJSGeneratedFunction*>(&Code[3]);
+        }
+        return nullptr;
+    }
 };

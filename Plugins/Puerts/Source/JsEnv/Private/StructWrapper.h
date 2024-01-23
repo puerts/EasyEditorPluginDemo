@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Tencent is pleased to support the open source community by making Puerts available.
  * Copyright (C) 2020 THL A29 Limited, a Tencent company.  All rights reserved.
  * Puerts is licensed under the BSD 3-Clause License, except for the third-party components listed in the file 'LICENSE' which may
@@ -23,7 +23,11 @@
 #include "v8.h"
 #pragma warning(pop)
 
-namespace puerts
+#include "NamespaceDef.h"
+
+#define PUERTS_REUSE_STRUCTWRAPPER_FUNCTIONTEMPLATE 1
+
+namespace PUERTS_NAMESPACE
 {
 class FStructWrapper
 {
@@ -32,27 +36,37 @@ public:
     {
     }
 
-    FORCEINLINE void Init(UStruct* InStruct)
+    FORCEINLINE void Init(UStruct* InStruct, bool IsReuseTemplate)
     {
-        ExternalInitialize = nullptr;
-        ExternalFinalize = nullptr;
         Struct = InStruct;
-        Properties.clear();
-        ExtensionMethods.clear();
+        if (!IsReuseTemplate)
+        {
+            ExternalInitialize = nullptr;
+            ExternalFinalize = nullptr;
+            Properties.clear();
+            ExtensionMethods.clear();
+#if PUERTS_REUSE_STRUCTWRAPPER_FUNCTIONTEMPLATE
+            CachedFunctionTemplate.Reset();
+#endif
+        }
     }
 
-    void AddExtensionMethods(std::vector<UFunction*> InExtensionMethods);
+    void AddExtensionMethods(const std::vector<UFunction*>& InExtensionMethods);
+
+#if PUERTS_REUSE_STRUCTWRAPPER_FUNCTIONTEMPLATE
+    v8::UniquePersistent<v8::FunctionTemplate> CachedFunctionTemplate;
+#endif
 
 protected:
     std::vector<std::shared_ptr<FPropertyTranslator>> Properties;
 
-    std::map<FString, std::shared_ptr<FPropertyTranslator>> PropertiesMap;
+    TMap<FName, std::shared_ptr<FPropertyTranslator>> PropertiesMap;
 
     std::shared_ptr<FPropertyTranslator> GetPropertyTranslator(PropertyMacro* InProperty);
 
-    std::map<FString, std::shared_ptr<FFunctionTranslator>> FunctionsMap;
+    TMap<FName, std::shared_ptr<FFunctionTranslator>> FunctionsMap;
 
-    std::map<FString, std::shared_ptr<FFunctionTranslator>> MethodsMap;
+    TMap<FName, std::shared_ptr<FFunctionTranslator>> MethodsMap;
 
     std::shared_ptr<FFunctionTranslator> GetFunctionTranslator(UFunction* InFunction);
 
@@ -60,7 +74,8 @@ protected:
 
     void RefreshMethod(UFunction* InFunction);
 
-    void InitTemplateProperties(v8::Isolate* Isolate, UStruct* InStruct, v8::Local<v8::FunctionTemplate> Template);
+    void InitTemplateProperties(
+        v8::Isolate* Isolate, UStruct* InStruct, v8::Local<v8::FunctionTemplate> Template, bool IsReuseTemplate);
 
     v8::Local<v8::FunctionTemplate> ToFunctionTemplate(v8::Isolate* Isolate, v8::FunctionCallback Construtor);
 
@@ -71,6 +86,10 @@ protected:
     FinalizeFunc ExternalFinalize;
 
     TWeakObjectPtr<UStruct> Struct;
+
+    bool IsNativeTakeJsRef = false;
+
+    bool IsTypeScriptGeneratedClass = false;
 
     static void StaticClass(const v8::FunctionCallbackInfo<v8::Value>& Info);
 
@@ -96,6 +115,11 @@ public:
 
     static void Free(TWeakObjectPtr<UStruct> InStruct, FinalizeFunc InExternalFinalize, void* Ptr);
 
+    void Free(void* Ptr)
+    {
+        Free(Struct, ExternalFinalize, Ptr);
+    }
+
     static void New(const v8::FunctionCallbackInfo<v8::Value>& Info);
 
     void New(v8::Isolate* Isolate, v8::Local<v8::Context>& Context, const v8::FunctionCallbackInfo<v8::Value>& Info);
@@ -114,4 +138,4 @@ public:
 
     void New(v8::Isolate* Isolate, v8::Local<v8::Context>& Context, const v8::FunctionCallbackInfo<v8::Value>& Info);
 };
-}    // namespace puerts
+}    // namespace PUERTS_NAMESPACE
