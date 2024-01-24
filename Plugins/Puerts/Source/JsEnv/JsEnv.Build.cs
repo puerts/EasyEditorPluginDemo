@@ -18,7 +18,7 @@ public class JsEnv : ModuleRules
         false;
 #endif
 
-    private bool UseNodejs = false;
+    private bool UseNodejs = true;
 
     private bool Node16 = true;
 
